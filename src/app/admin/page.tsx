@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { FormEvent, useSyncExternalStore, useState, useCallback, useRef, useEffect } from "react";
 import { type Catalog, type Entry, emptyCatalog, normalizeCatalog, sanitizeImageList } from "@/lib/catalog";
+import { DEFAULT_DEPLOYMENT_ADMIN, resolveAdminCredentials } from "@/lib/admin-config";
 
 type RecoveryQuestion = {
   question: string;
@@ -26,9 +27,9 @@ type PasswordConfig = {
 };
 
 const DEFAULT_RECOVERY_QUESTIONS: RecoveryQuestion[] = [
-  { question: "What is your company start date?", answer: "bc702fbdd9ff0c01bd9274141d36da74ee602cfb24a8bffa1155c7b36da11d86" },
-  { question: "What is the name of your favourite person?", answer: "7708bfc564bb08621075c973b63d3165d764ee695952c65a2a9ce409974d69a8" },
-  { question: "What is your close friend name?", answer: "ab845955a39985132aa7b6b59b48b68360ee74b34e11362375cf86692740e864" },
+  { question: "What is your company start date?", answer: "2fa06ff873aaed458be33dbff6bc51954df6a936d83ab1b57f3fbdd22056fc8a" },
+  { question: "What is the name of your favourite person?", answer: "4bf29cdc80a75dc80e4aaf9795dc470201f0bc7f1cfc8a4db17dce546440d393" },
+  { question: "What is your close friend name?", answer: "be0bd5f59e3c8336ad10b03525f504cafb4ba73d1efdb93ce874c0c990b2ea64" },
 ];
 
 const DEFAULT_SECURITY_CONFIG: PasswordConfig = {
@@ -137,20 +138,17 @@ export default function AdminPage() {
 
   useEffect(() => {
     try {
-      const savedPassword = localStorage.getItem("siddeshwara-admin-password") ?? DEFAULT_SECURITY_CONFIG.admin.currentPassword;
-      const savedUser = localStorage.getItem("siddeshwara-admin-username") ?? DEFAULT_SECURITY_CONFIG.admin.username;
-      const savedEmail = localStorage.getItem("siddeshwara-admin-email") ?? DEFAULT_SECURITY_CONFIG.admin.email;
-      const savedPhone = localStorage.getItem("siddeshwara-admin-phone") ?? DEFAULT_SECURITY_CONFIG.admin.phone;
+      const deploymentAdmin = resolveAdminCredentials(localStorage);
       const savedRecovery = localStorage.getItem("siddeshwara-admin-recovery");
 
       const nextConfig: PasswordConfig = {
         ...DEFAULT_SECURITY_CONFIG,
         admin: {
           ...DEFAULT_SECURITY_CONFIG.admin,
-          username: savedUser,
-          email: savedEmail,
-          phone: savedPhone,
-          currentPassword: savedPassword,
+          username: deploymentAdmin.username,
+          email: deploymentAdmin.email,
+          phone: deploymentAdmin.phone,
+          currentPassword: deploymentAdmin.currentPassword,
           recoveryQuestions: savedRecovery ? JSON.parse(savedRecovery) : DEFAULT_SECURITY_CONFIG.admin.recoveryQuestions,
         },
       };
@@ -270,8 +268,8 @@ export default function AdminPage() {
       setLoginAttempts(0);
     }
 
-    const effectiveUsername = localStorage.getItem("siddeshwara-admin-username") ?? passwordConfig.admin.username;
-    const effectivePassword = localStorage.getItem("siddeshwara-admin-password") ?? passwordConfig.admin.currentPassword;
+    const effectiveUsername = passwordConfig.admin.username;
+    const effectivePassword = passwordConfig.admin.currentPassword;
     const enteredPasswordHash = await tripleHash(password);
 
     if (normalizeText(username) === normalizeText(effectiveUsername) && enteredPasswordHash === effectivePassword) {
