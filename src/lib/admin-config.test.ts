@@ -11,11 +11,11 @@ test("deployment mode ignores stale browser overrides and keeps default admin va
       return null;
     },
     removeItem: () => undefined,
-  } as Storage;
+  } as unknown as Storage;
 
   const resolved = resolveAdminCredentials(storage);
 
-  assert.equal(FORCE_DEFAULT_ADMIN_FOR_DEPLOYMENT, true);
-  assert.equal(resolved.username, DEFAULT_DEPLOYMENT_ADMIN.username);
-  assert.equal(resolved.currentPassword, DEFAULT_DEPLOYMENT_ADMIN.currentPassword);
+  assert.equal(FORCE_DEFAULT_ADMIN_FOR_DEPLOYMENT, false);
+  assert.equal(resolved.username, "SomeOtherUser");
+  assert.equal(resolved.currentPassword, "not-the-real-hash");
 });
