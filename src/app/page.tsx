@@ -5,6 +5,13 @@ import { useEffect, useState, useSyncExternalStore, useCallback, useRef } from "
 import { type Catalog, type Entry, emptyCatalog, normalizeCatalog } from "@/lib/catalog";
 import ProjectCard from "./components/ProjectCard";
 
+type StoryEntry = {
+  title: string;
+  description: string;
+  images: string[];
+  type: "company" | "works";
+};
+
 const mapUrl = "https://www.google.com/maps/place/13%C2%B002'10.4%22N+77%C2%B029'45.2%22E/@13.035287,77.4965696,17.67z/data=!4m4!3m3!8m2!3d13.036232!4d77.4958878?hl=en&entry=ttu";
 const mapEmbedUrl = "https://www.google.com/maps?q=13.036232,77.4958878&z=17&output=embed";
 
@@ -19,6 +26,9 @@ const subscribe = (callback: () => void) => {
 
 export default function Home() {
   const [scrollY, setScrollY] = useState(0);
+  const [story, setStory] = useState<StoryEntry | null>(null);
+  const [storyIndex, setStoryIndex] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const catalogCacheRef = useRef<{ raw: string | null; parsed: Catalog } | null>(null);
 
   const getCatalogSnapshotMemo = useCallback(() => {
@@ -60,15 +70,24 @@ export default function Home() {
       }
     };
 
-    syncFromDatabase();
+    const scheduleSync = () => {
+      const runner = () => {
+        void syncFromDatabase();
+      };
+
+      const timeout = window.setTimeout(runner, 120);
+      return () => window.clearTimeout(timeout);
+    };
+
+    const cleanup = scheduleSync();
 
     const onFocus = () => {
-      syncFromDatabase();
+      void syncFromDatabase();
     };
 
     const onVisibilityChange = () => {
       if (!document.hidden) {
-        syncFromDatabase();
+        void syncFromDatabase();
       }
     };
 
@@ -77,6 +96,7 @@ export default function Home() {
     window.addEventListener("storage", onFocus);
 
     return () => {
+      cleanup();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("storage", onFocus);
@@ -84,10 +104,110 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const onScroll = () => setScrollY(window.scrollY);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const media = typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+
+    const updateMotionPreference = () => {
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+      setReduceMotion(Boolean(media?.matches) || isMobile);
+    };
+
+    updateMotionPreference();
+
+    media?.addEventListener?.("change", updateMotionPreference);
+    window.addEventListener("resize", updateMotionPreference, { passive: true });
+
+    return () => {
+      media?.removeEventListener?.("change", updateMotionPreference);
+      window.removeEventListener("resize", updateMotionPreference);
+    };
   }, []);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      setScrollY(0);
+      return undefined;
+    }
+
+    let frameId = 0;
+
+    const onScroll = () => {
+      if (frameId) {
+        return;
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        setScrollY(window.scrollY);
+        frameId = 0;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [reduceMotion]);
+
+  const orbitOneStyle = reduceMotion ? { transform: "rotate(0deg)" } : { transform: `rotate(${scrollY * 0.12}deg)` };
+  const orbitTwoStyle = reduceMotion ? { transform: "rotate(0deg)" } : { transform: `rotate(${-scrollY * 0.18}deg)` };
+  const energyCoreStyle = reduceMotion
+    ? { transform: "translateY(0px) rotateX(0deg) rotateY(0deg)" }
+    : { transform: `translateY(${scrollY * 0.08}px) rotateX(${scrollY * 0.04}deg) rotateY(${scrollY * 0.05}deg)` };
+
+  const openStory = (entry: Entry, entryType: "company" | "works") => {
+    const safeImages = Array.isArray(entry.images) ? entry.images.filter(Boolean) : [];
+    const images = safeImages.length > 0 ? safeImages : ["https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=85"];
+
+    setStory({
+      title: entry.title,
+      description: entry.description,
+      images,
+      type: entryType,
+    });
+    setStoryIndex(0);
+  };
+
+  const closeStory = () => {
+    setStory(null);
+    setStoryIndex(0);
+  };
+
+  const showPrevious = () => {
+    if (!story) {
+      return;
+    }
+    setStoryIndex((current) => (current === 0 ? story.images.length - 1 : current - 1));
+  };
+
+  const showNext = () => {
+    if (!story) {
+      return;
+    }
+    setStoryIndex((current) => (current === story.images.length - 1 ? 0 : current + 1));
+  };
+
+  useEffect(() => {
+    if (!story) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeStory();
+      }
+      if (event.key === "ArrowLeft") {
+        showPrevious();
+      }
+      if (event.key === "ArrowRight") {
+        showNext();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [story]);
 
   return (
     <main className="landing-page">
@@ -129,9 +249,9 @@ export default function Home() {
           </div>
 
           <div className="hero-visual" aria-hidden="true">
-            <div className="orbit orbit-one" style={{ transform: `rotate(${scrollY * 0.12}deg)` }} />
-            <div className="orbit orbit-two" style={{ transform: `rotate(${-scrollY * 0.18}deg)` }} />
-            <div className="energy-core" style={{ transform: `translateY(${scrollY * 0.08}px) rotateX(${scrollY * 0.04}deg) rotateY(${scrollY * 0.05}deg)` }}>
+            <div className="orbit orbit-one" style={orbitOneStyle} />
+            <div className="orbit orbit-two" style={orbitTwoStyle} />
+            <div className="energy-core" style={energyCoreStyle}>
               <div className="core-face face-front">ϟ</div>
               <div className="core-face face-side" />
               <div className="core-face face-top" />
@@ -151,7 +271,7 @@ export default function Home() {
 
           <div className="project-grid">
             {catalog.company.map((entry: Entry, index: number) => (
-              <ProjectCard key={index} entry={entry} index={index} type="company" />
+              <ProjectCard key={`${entry.title}-${index}`} entry={entry} index={index} type="company" onOpen={openStory} />
             ))}
           </div>
         </div>
@@ -182,11 +302,60 @@ export default function Home() {
 
           <div className="project-grid">
             {catalog.works.map((entry: Entry, index: number) => (
-              <ProjectCard key={index} entry={entry} index={index} type="works" />
+              <ProjectCard key={`${entry.title}-${index}`} entry={entry} index={index} type="works" onOpen={openStory} />
             ))}
           </div>
         </div>
       </section>
+
+      {story && (
+        <div
+          className="story-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${story.title || "Project"} gallery`}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              closeStory();
+            }
+          }}
+        >
+          <div className="story-panel">
+            <div className="story-header">
+              <button type="button" className="story-back" onClick={closeStory}>
+                ← Back to home
+              </button>
+              <span className="story-counter">
+                {String(storyIndex + 1).padStart(2, "0")} / {String(story.images.length).padStart(2, "0")}
+              </span>
+            </div>
+
+            <div className="story-stage">
+              <button type="button" className="story-nav story-prev" onClick={showPrevious} aria-label="Previous image">
+                ←
+              </button>
+              <img
+                src={story.images[storyIndex]}
+                alt={`${story.title || "Project"} view ${storyIndex + 1}`}
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+              />
+              <button type="button" className="story-nav story-next" onClick={showNext} aria-label="Next image">
+                →
+              </button>
+            </div>
+
+            <div className="story-footer">
+              <div>
+                <p>{story.type === "works" ? story.description || "Project" : story.title}</p>
+                <h3>{story.type === "works" ? story.title : story.description || "Company entry"}</h3>
+              </div>
+              <a href="#contact" className="story-contact" onClick={closeStory}>Enquire</a>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="location-section" id="contact">
         <div className="page-shell contact-shell">
